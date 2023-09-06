@@ -1,7 +1,7 @@
-% unicycle_test
+% an attempt towards trajectory tracking
 clear, clc, close all;
 
-Nt = 200; T = 2; 
+Nt = 300; T = 2; 
 Nx = 51; Ny = Nx; L = 10; 
 % To modify the configuration, change lines above
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -14,44 +14,46 @@ M = 1;
 
 x = [qx(1); qy(1); pi/2];
 
+omega_r = gradient(psi_p, t);
 % ud: desired longitudinal speed profile
 [pd_dot, pd_ddot, ud, uddot] = derivativeComp(qx, qy, t);
 
-k1 = 1;
-k2 = 1;
 
 fig = figure(1);
 set(gcf, 'Units', 'Normalized', 'OuterPosition', [0 0 1 1]);
 
-%%%%%%%%%%%%
-Nsteps = 425; % a user-tuning parameter, change it such that the end of the trajectory is closer to the full path
-%%%%%%%%%%%%
-
-for k = 1 : Nsteps
-    [r, idx, upk] = compute_turning_rate(qx, qy, x(:, k), pd_dot, pd_ddot, psi_p, ud, uddot, k1, k2);
+for k = 1 : Nt
+%     u(:, k) = YLF15(k, qx, qy, ud, psi_p, omega_r, x(:, k));
+    u(:, k) = JN97(k, qx, qy, ud, psi_p, omega_r, x(:, k));
+%     keyboard
     
-    % time marching the trajectory with solved control inputs
-%     u(:, k) = [upk; r];
-    u(:, k) = [ud(idx); r];
+
     func = @(x) RHS(x, u(:, k));
     x(:, k+1) = rk45(func, x(:, k), dt);
 
+    % error in inertial frame
+    error(:, k) = [qx(k)-x(1, k); qy(k)-x(2, k); psi_p(k)-x(3, k)];
+
+    figure(1);
     % save figures
     subplot(2, 3, [1 2 4 5])
     plot(qx, qy, 'r'), hold on; grid on;
     plot(x(1, 1:k), x(2, 1:k), '--b');
+    s = scatter(qx(k), qy(k), 10, 'r', 'filled');
+
     xlabel('$x$', 'Interpreter', 'latex')
     ylabel('$y$', 'Interpreter', 'latex')
     legend('reference', 'unicycle trajectory')
 
     subplot(2, 3, 3)
-    plot(u(1, 1:k), 'b'), grid on; hold on;
+    plot(u(1, 1:k), 'b'); grid on; hold on;
+    
     xlabel('$t$', 'Interpreter', 'latex')
     ylabel('$v$', 'Interpreter', 'latex')
     legend('linear velocity')
 
     subplot(2, 3, 6)
-    plot(u(2, 1:k)), grid on;
+    plot(u(2, 1:k)); grid on; hold on;
     xlabel('$t$', 'Interpreter', 'latex')
     ylabel('$r$', 'Interpreter', 'latex')
     legend('heading rate')
@@ -61,7 +63,18 @@ for k = 1 : Nsteps
 %     file_name = sprintf('images/pf%d.png', k);
 %     saveas(fig, file_name, 'png');
 %     clf(1)
+
+    figure(2);
+    % error in inertial frame
+    plot(error(1, 1:k), 'b'), hold on;
+    plot(error(2, 1:k), 'r')
+    plot(error(3, 1:k), 'g')
+    legend('$x_e$', '$y_e$', '$\theta_e$', 'interpreter', 'latex');
+
+    
+%     keyboard
     pause(.5)
+    delete(s);
 end
 
 function dx = RHS(x, u)
@@ -70,3 +83,4 @@ dx(1) = u(1) * cos(x(3));
 dx(2) = u(1) * sin(x(3));
 dx(3) = u(2);
 end
+
